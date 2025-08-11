@@ -194,13 +194,24 @@ impl VersionCheckable for VersionChecker {
     async fn check_latest_version(
         &self,
     ) -> Result<GitHubRelease, Box<dyn std::error::Error + Send + Sync>> {
-        let response = self.client.get(get_github_releases_url()).send().await?;
+        let url = get_github_releases_url();
+        log::debug!("Checking for updates at URL: {}", url);
+
+        let response = match self.client.get(&url).send().await {
+            Ok(response) => response,
+            Err(e) => {
+                log::error!("Failed to send GET request to {}: {}", url, e);
+                return Err(e.into());
+            }
+        };
 
         if !response.status().is_success() {
+            log::debug!("GitHub API returned status: {} for URL: {}", response.status(), url);
             return Err(format!("GitHub API returned status: {}", response.status()).into());
         }
 
         let release: GitHubRelease = response.json().await?;
+        log::debug!("Successfully fetched release: {}", release.tag_name);
         Ok(release)
     }
 
