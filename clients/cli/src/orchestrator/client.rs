@@ -68,6 +68,9 @@ impl OrchestratorClient {
 
     async fn handle_response_status(response: Response) -> Result<Response, OrchestratorError> {
         if !response.status().is_success() {
+            let url = response.url().to_string();
+            let status = response.status();
+            log::warn!("Request failed - URL: {}, Status: {}", url, status);
             return Err(OrchestratorError::from_response(response).await);
         }
         Ok(response)
@@ -78,14 +81,24 @@ impl OrchestratorClient {
         endpoint: &str,
     ) -> Result<T, OrchestratorError> {
         let url = self.build_url(endpoint);
-        let response = self
+        log::debug!("Making GET request to: {}", url);
+
+        let response = match self
             .client
             .get(&url)
             .header("User-Agent", USER_AGENT)
             .header("X-Build-Timestamp", BUILD_TIMESTAMP)
             .send()
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                log::error!("Failed to send GET request to {}: {}", url, e);
+                return Err(OrchestratorError::Reqwest(e));
+            }
+        };
 
+        log::debug!("Received response from {}: status {}", url, response.status());
         let response = Self::handle_response_status(response).await?;
         let response_bytes = response.bytes().await?;
         Self::decode_response(&response_bytes)
@@ -97,7 +110,9 @@ impl OrchestratorClient {
         body: Vec<u8>,
     ) -> Result<T, OrchestratorError> {
         let url = self.build_url(endpoint);
-        let response = self
+        log::debug!("Making POST request to: {} (body size: {} bytes)", url, body.len());
+
+        let response = match self
             .client
             .post(&url)
             .header("Content-Type", "application/octet-stream")
@@ -105,8 +120,16 @@ impl OrchestratorClient {
             .header("X-Build-Timestamp", BUILD_TIMESTAMP)
             .body(body)
             .send()
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                log::error!("Failed to send POST request to {}: {}", url, e);
+                return Err(OrchestratorError::Reqwest(e));
+            }
+        };
 
+        log::debug!("Received response from {}: status {}", url, response.status());
         let response = Self::handle_response_status(response).await?;
         let response_bytes = response.bytes().await?;
         Self::decode_response(&response_bytes)
@@ -118,7 +141,9 @@ impl OrchestratorClient {
         body: Vec<u8>,
     ) -> Result<(), OrchestratorError> {
         let url = self.build_url(endpoint);
-        let response = self
+        log::debug!("Making POST request (no response expected) to: {} (body size: {} bytes)", url, body.len());
+
+        let response = match self
             .client
             .post(&url)
             .header("Content-Type", "application/octet-stream")
@@ -126,8 +151,16 @@ impl OrchestratorClient {
             .header("X-Build-Timestamp", BUILD_TIMESTAMP)
             .body(body)
             .send()
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                log::error!("Failed to send POST request to {}: {}", url, e);
+                return Err(OrchestratorError::Reqwest(e));
+            }
+        };
 
+        log::debug!("Received response from {}: status {}", url, response.status());
         Self::handle_response_status(response).await?;
         Ok(())
     }
