@@ -90,9 +90,11 @@ use mockall::{automock, predicate::*};
 // Check for updates and constraints every 24 hours
 const VERSION_CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
-// GitHub API endpoint for the latest release
-const GITHUB_RELEASES_URL: &str =
-    "https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest";
+// GitHub API endpoint for the latest release - configurable via environment variable
+fn get_github_releases_url() -> String {
+    std::env::var("NEXUS_GITHUB_RELEASES_URL")
+        .unwrap_or_else(|_| "https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest".to_string())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitHubRelease {
@@ -192,7 +194,7 @@ impl VersionCheckable for VersionChecker {
     async fn check_latest_version(
         &self,
     ) -> Result<GitHubRelease, Box<dyn std::error::Error + Send + Sync>> {
-        let response = self.client.get(GITHUB_RELEASES_URL).send().await?;
+        let response = self.client.get(get_github_releases_url()).send().await?;
 
         if !response.status().is_success() {
             return Err(format!("GitHub API returned status: {}", response.status()).into());
