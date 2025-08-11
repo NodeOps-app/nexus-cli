@@ -385,6 +385,32 @@ async fn handle_fetch_error(
         _ => {
             state.increase_backoff_for_error();
             let log_level = state.error_classifier.classify_fetch_error(&error);
+
+            // Add detailed debug logging for request failures
+            let debug_msg = match &error {
+                OrchestratorError::Reqwest(reqwest_error) => {
+                    format!(
+                        "Request failed - URL: {}, Error: {}, Status: {:?}",
+                        reqwest_error.url().map(|u| u.to_string()).unwrap_or_else(|| "unknown".to_string()),
+                        reqwest_error,
+                        reqwest_error.status()
+                    )
+                }
+                OrchestratorError::Http { status, message, .. } => {
+                    format!("HTTP error {}: {}", status, message)
+                }
+                _ => format!("Orchestrator error: {:?}", error),
+            };
+
+            // Log debug info at debug level
+            send_event(
+                event_sender,
+                format!("[DEBUG] {}", debug_msg),
+                crate::events::EventType::Error,
+                LogLevel::Debug,
+            )
+            .await;
+
             let event = Event::task_fetcher_with_level(
                 format!(
                     "Failed to fetch task: {}, retrying in {} seconds",
